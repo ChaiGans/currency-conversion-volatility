@@ -66,9 +66,9 @@ def a_star_search(graph, start, goal, exchange_rates):
 
         for neighbor, rate in graph[current].items():
             new_inv_rate = current_inv_rate * (1 / rate)  # Invert and multiply rates
-            if neighbor not in cost_so_far or new_inv_rate < cost_so_far[neighbor]:  # Minimize the inverted rates
+            if neighbor not in cost_so_far or new_inv_rate < cost_so_far[neighbor]:
                 cost_so_far[neighbor] = new_inv_rate
-                priority = new_inv_rate * heuristic(neighbor, goal, exchange_rates)  # Adjust priority accordingly
+                priority = new_inv_rate * heuristic(neighbor, goal, exchange_rates)
                 heapq.heappush(open_list, (priority, neighbor))
                 came_from[neighbor] = current
 
@@ -172,7 +172,7 @@ def main():
                         
                         base_rate = exchange_rates['conversion_rates'][to_currency] / exchange_rates['conversion_rates'][from_currency]
                         volatility_rate = volatile_rate / base_rate - 1 
-                        path_details.append((from_currency, to_currency, total_cost_step, volatile_rate, tax, volatility_rate))
+                        path_details.append((from_currency, to_currency, total_cost_step, volatile_rate, tax, volatility_rate, base_rate))
                     path_costs.append((conversion_amount, path_details)) 
 
                 # Sort paths by the conversion amount (higher is better)
@@ -182,7 +182,7 @@ def main():
                 print(f"All possible paths from {start_currency} to {goal_currency}:")
                 for conversion_amount, details in path_costs:
                     print(f"Path starts with 1 {start_currency} converting through:")
-                    for from_currency, to_currency, total_cost_step, volatile_rate, tax, volatility_rate in details:
+                    for from_currency, to_currency, total_cost_step, volatile_rate, tax, volatility_rate, base_rate in details:
                         print(f"{from_currency} -> {to_currency} (Effective Conversion: {total_cost_step:.6f}, Base Rate: {base_rate:.6f}, Volatility: {volatility_rate * 100:.2f}%, Tax: {tax:.2%})")
                     print(f"Total effective conversion: {conversion_amount:.6f} {goal_currency} from 1 {start_currency}\n")
 
