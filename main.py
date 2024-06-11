@@ -77,12 +77,25 @@ def a_star_search(graph, start, goal, exchange_rates):
 def reconstruct_path(came_from, start, goal):
     current = goal
     path = []
+    visited = set()  # To track visited nodes and prevent infinite loops
+
     while current != start:
+        if current in visited:
+            print(came_from)
+            print("Warning: Infinite loop detected in path reconstruction!")
+            return []
+        visited.add(current)
+
         path.append(current)
+        if current not in came_from:
+            print(f"Error: Path to {current} not found!")
+            return []  # Return an empty path if the current node is not in came_from
         current = came_from[current]
+    
     path.append(start)
     path.reverse()
     return path
+
 
 def find_all_paths(graph, start, goal, path=[]):
     path = path + [start]
