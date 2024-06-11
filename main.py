@@ -29,17 +29,17 @@ def create_graph(exchange_rates, available_pairs):
         for target_currency in available_pairs.get(currency, []):
             if target_currency in exchange_rates['conversion_rates']:
                 base_target_rate = exchange_rates['conversion_rates'][target_currency]
-                conversion_rate = base_target_rate/rate
+                conversion_rate = base_target_rate / rate
 
-                
-                # Apply volatility to the base conversion rate
-                volatile_rate = conversion_rate * generate_price_volatility()
-                
+                volatile_rate = conversion_rate * (generate_price_volatility())
+
+                # Calculate tax
                 tax = generate_random_tax()
-                total_cost = volatile_rate * (1 + tax)
-                
-                graph[currency][target_currency] = total_cost
-                conversion_rates[currency][target_currency] = (volatile_rate, tax, total_cost)
+                effective_rate = volatile_rate * (1 - tax)  # Reduce rate by tax
+
+                # Store the effective rate that maximizes the conversion value
+                graph[currency][target_currency] = effective_rate
+                conversion_rates[currency][target_currency] = (volatile_rate, tax, effective_rate)
     return graph, conversion_rates
 
 def heuristic(current, goal, exchange_rates):
@@ -54,24 +54,24 @@ def heuristic(current, goal, exchange_rates):
 
 def a_star_search(graph, start, goal, exchange_rates):
     open_list = []
-    heapq.heappush(open_list, (0, start))
+    heapq.heappush(open_list, (1, start))  # Start with an inverted rate of 1 (which represents no change)
     came_from = {}
-    cost_so_far = {start: 0}
-    
+    cost_so_far = {start: 1}  # Initialize with 1, meaning no conversion has taken place
+
     while open_list:
-        current_cost, current = heapq.heappop(open_list)
-        
+        current_inv_rate, current = heapq.heappop(open_list)
+
         if current == goal:
             break
-        
-        for neighbor, cost in graph[current].items():
-            new_cost = cost_so_far[current] + cost
-            if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]:
-                cost_so_far[neighbor] = new_cost
-                priority = new_cost + heuristic(neighbor, goal, exchange_rates)
+
+        for neighbor, rate in graph[current].items():
+            new_inv_rate = current_inv_rate * (1 / rate)  # Invert and multiply rates
+            if neighbor not in cost_so_far or new_inv_rate < cost_so_far[neighbor]:  # Minimize the inverted rates
+                cost_so_far[neighbor] = new_inv_rate
+                priority = new_inv_rate * heuristic(neighbor, goal, exchange_rates)  # Adjust priority accordingly
                 heapq.heappush(open_list, (priority, neighbor))
                 came_from[neighbor] = current
-            
+
     return came_from, cost_so_far
 
 def reconstruct_path(came_from, start, goal):
@@ -132,15 +132,16 @@ def main():
 
             path = reconstruct_path(came_from, start_currency, goal_currency)
             print(f"A-STAR || Cheapest conversion path from {start_currency} to {goal_currency}:")
+            conversion_amount = 1  # Start with 1 unit of the base currency
             for i in range(len(path) - 1):
                 from_currency = path[i]
                 to_currency = path[i + 1]
                 volatile_rate, tax, total_cost_step = conversion_rates[from_currency][to_currency]
+                conversion_amount *= total_cost_step  # Update the conversion amount through each step
                 base_rate = exchange_rates['conversion_rates'][to_currency] / exchange_rates['conversion_rates'][from_currency]
-                print(base_rate)
                 volatility_rate = volatile_rate / base_rate - 1
-                print(f"{from_currency} -> {to_currency} (Cost: {total_cost_step:.6f}, Conversion Rate: {volatile_rate:.6f}, Base Rate: {base_rate:.6f}, Volatility: {volatility_rate * 100:.2f}%, Tax: {tax:.2%})")
-            print(f"Total cost: {cost_so_far[goal_currency]:.6f}\n")
+                print(f"{from_currency} -> {to_currency} (Effective Conversion: {conversion_amount:.6f}, Base Rate: {base_rate:.6f}, Volatility: {volatility_rate * 100:.2f}%, Tax: {tax:.2%})")
+            print(f"Total effective conversion: {conversion_amount:.6f}\n")
 
             paths = find_all_paths(graph, start_currency, goal_currency)
             if not paths:
@@ -148,36 +149,37 @@ def main():
             else:
                 path_costs = []
                 for path in paths:
-                    total_cost = 0
+                    conversion_amount = 1
                     path_details = []
                     for i in range(len(path) - 1):
                         from_currency = path[i]
                         to_currency = path[i + 1]
                         volatile_rate, tax, total_cost_step = conversion_rates[from_currency][to_currency]
-                        total_cost += total_cost_step
-                        # Extract the volatility from the volatile_rate and the base rate
+                        conversion_amount *= total_cost_step 
+                        
                         base_rate = exchange_rates['conversion_rates'][to_currency] / exchange_rates['conversion_rates'][from_currency]
-                        volatility_rate = volatile_rate / base_rate - 1  # Calculate the percent change due to volatility
+                        volatility_rate = volatile_rate / base_rate - 1 
                         path_details.append((from_currency, to_currency, total_cost_step, volatile_rate, tax, volatility_rate))
-                    path_costs.append((total_cost, path_details))
+                    path_costs.append((conversion_amount, path_details)) 
 
-                # Sort paths by total cost
-                path_costs.sort(key=lambda x: x[0])
+                # Sort paths by the conversion amount (higher is better)
+                path_costs.sort(key=lambda x: x[0], reverse=True)  # Reverse sort to prioritize higher conversion rates
 
-                # Display all paths sorted by total cost
+                # Display all paths sorted by total effective conversion
                 print(f"All possible paths from {start_currency} to {goal_currency}:")
-                for total_cost, details in path_costs:
+                for conversion_amount, details in path_costs:
+                    print(f"Path starts with 1 {start_currency} converting through:")
                     for from_currency, to_currency, total_cost_step, volatile_rate, tax, volatility_rate in details:
-                        print(f"{from_currency} -> {to_currency} (Cost: {total_cost_step:.6f}, Volatile Rate: {volatile_rate:.6f}, Base Rate: {exchange_rates['conversion_rates'][to_currency] / exchange_rates['conversion_rates'][from_currency]:.6f}, Volatility: {volatility_rate * 100:.2f}%, Tax: {tax:.2%})")
-                    print(f"Total cost for this path: {total_cost:.6f}\n")
+                        print(f"{from_currency} -> {to_currency} (Effective Conversion: {total_cost_step:.6f}, Base Rate: {base_rate:.6f}, Volatility: {volatility_rate * 100:.2f}%, Tax: {tax:.2%})")
+                    print(f"Total effective conversion: {conversion_amount:.6f} {goal_currency} from 1 {start_currency}\n")
 
                 validation = False
                 while not validation:
                     another = input("Do you want to find another conversion path? (yes/no): ").lower()
                     if another == 'yes':
                         validation = True
-                if another == 'no':
-                    break
+                    if another == 'no':
+                        break
     else:
         print("Failed to retrieve exchange rates.")
 
